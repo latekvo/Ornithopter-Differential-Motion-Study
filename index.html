@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ornithopter Differential Motion</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: one viewport-high page. Graph card on the left (controls, legend, chart filling the rest), dial card on the right; on narrow screens the dial card sits below. */
+:root {
+  color-scheme: light;
+  --cream: #fefae0;
+  --tan: #dda15e;
+  --rust: #bc6c25;
+  --olive: #606c38;
+  --forest: #283618;
+  --bg: color-mix(in srgb, var(--cream) 84%, var(--tan));
+  --sheet: var(--cream);
+  --ink: var(--forest);
+  --ink-2: color-mix(in srgb, var(--forest) 78%, var(--cream));
+  --rule: color-mix(in srgb, var(--tan) 48%, var(--cream));
+  --grid: color-mix(in srgb, var(--tan) 22%, var(--cream));
+  /* Shifted apart in lightness so g and h stay distinct under red-green colour blindness. */
+  --g: color-mix(in srgb, var(--olive) 85%, var(--forest));
+  --h: color-mix(in srgb, var(--rust) 80%, var(--tan));
+  --band: color-mix(in srgb, var(--tan) 20%, transparent);
+  --keepout: color-mix(in srgb, var(--forest) 6%, transparent);
+  /* Controls are raised keys after Uiverse "sour-horse-29" by aasisodiya. */
+  --key: color-mix(in srgb, var(--tan) 16%, var(--cream));
+  --key-edge: color-mix(in srgb, var(--tan) 55%, var(--cream));
+  --knob: var(--tan);
+  --knob-edge: var(--rust);
+  --knob-on: var(--olive);
+  --knob-on-edge: var(--forest);
+  --font-math: "STIX Two Text", "Cambria Math", "Times New Roman", serif;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; }
+:focus-visible { outline: 2px solid var(--forest); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.m { font-family: var(--font-math); font-size: 1.06em; }
+
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(250px, 24vw, 330px);
+  grid-template-rows: 1fr;
+  gap: 14px;
+}
+.card { min-width: 0; background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; }
+
+/* Graph card */
+.plot { margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.keys { display: flex; align-items: center; gap: 10px 14px; }
+.sliders { flex: 1 1 560px; container-type: inline-size; }
+.sliders-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; }
+@container (max-width: 629px) { .sliders-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mini { display: grid; grid-template-columns: auto minmax(70px, 1fr) 3.4em; align-items: center; gap: 8px; }
+.mini output { font-family: var(--font-math); font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.play {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px 8px 12px; margin-bottom: 4px;
+  border: 0; border-radius: 0.5em;
+  background: var(--knob); color: var(--forest);
+  font: 600 14px/1 var(--font-ui); cursor: pointer;
+  box-shadow: 0 4px var(--knob-edge);
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.4s, color 0.4s;
+}
+.play svg { width: 14px; height: 14px; fill: currentColor; }
+.play svg[hidden] { display: none; }
+.play:hover { transform: translateY(2px); box-shadow: 0 2px var(--knob-edge); }
+.play:active { transform: translateY(4px); box-shadow: 0 0 var(--knob-edge); }
+.play.on { background: var(--knob-on); color: var(--cream); box-shadow: 0 4px var(--knob-on-edge); }
+.play.on:hover { box-shadow: 0 2px var(--knob-on-edge); }
+.play.on:active { box-shadow: 0 0 var(--knob-on-edge); }
+.play:focus-visible { outline-offset: 3px; }
+
+.mini input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 0; background: transparent; cursor: pointer; }
+.mini input[type="range"]:focus-visible { border-radius: 6px; }
+.mini input[type="range"]::-webkit-slider-runnable-track { height: 12px; border-radius: 0.5em; background: var(--key); box-shadow: 0 3px var(--key-edge); }
+.mini input[type="range"]::-moz-range-track { height: 12px; border-radius: 0.5em; background: var(--key); box-shadow: 0 3px var(--key-edge); }
+.mini input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 20px; margin-top: -6px;
+  border: 0; border-radius: 0.3em;
+  background: var(--knob); box-shadow: 0 4px var(--knob-edge);
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+.mini input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 20px;
+  border: 0; border-radius: 0.3em;
+  background: var(--knob); box-shadow: 0 4px var(--knob-edge);
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+.mini input[type="range"]:hover::-webkit-slider-thumb { transform: translateY(2px); box-shadow: 0 2px var(--knob-edge); }
+.mini input[type="range"]:hover::-moz-range-thumb { transform: translateY(2px); box-shadow: 0 2px var(--knob-edge); }
+.mini input[type="range"]:active::-webkit-slider-thumb { transform: translateY(2px); background: var(--knob-on); box-shadow: 0 2px var(--knob-on-edge); }
+.mini input[type="range"]:active::-moz-range-thumb { transform: translateY(2px); background: var(--knob-on); box-shadow: 0 2px var(--knob-on-edge); }
+
+.tri {
+  position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 4px; margin-bottom: 3px;
+  border-radius: 0.5em; background: var(--key); box-shadow: 0 3px var(--key-edge);
+}
+.tri input { position: absolute; width: 0; height: 0; margin: 0; opacity: 0; }
+.tri label { position: relative; z-index: 1; padding: 7px 10px 9px; border-radius: 0.3em; text-align: center; white-space: nowrap; cursor: pointer; color: var(--ink-2); font-size: 13px; font-weight: 500; transition: color 0.4s; }
+.tri input:checked + label { color: var(--cream); }
+.tri input:focus-visible + label { outline: 2px solid var(--forest); outline-offset: -2px; }
+.tri-knob {
+  position: absolute; top: 4px; bottom: 6px; left: 4px; width: calc((100% - 8px) / 3);
+  border-radius: 0.3em; background: var(--knob-on); box-shadow: 0 4px var(--knob-on-edge);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  transition: transform 0.4s, top 0.2s, bottom 0.2s, box-shadow 0.2s;
+}
+.tri:hover .tri-knob { top: 6px; bottom: 4px; box-shadow: 0 2px var(--knob-on-edge); }
+
+@media (prefers-reduced-motion: reduce) {
+  .play, .tri label, .tri-knob { transition: none; }
+  .mini input[type="range"]::-webkit-slider-thumb { transition: none; }
+  .mini input[type="range"]::-moz-range-thumb { transition: none; }
+}
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); }
+.lg { display: inline-flex; align-items: center; gap: 6px; }
+.lg[hidden] { display: none; }
+.sw { width: 22px; height: 0; border-top: 2.5px solid var(--ink); }
+.sw-g { border-top-color: var(--g); }
+.sw-h { border-top-color: var(--h); }
+.sw-mid { border-top: 1.5px dashed var(--ink-2); }
+.sw-keep { height: 10px; border: 1px solid var(--rule); background: repeating-linear-gradient(45deg, var(--keepout) 0 3px, transparent 3px 6px), var(--keepout); }
+.sw-dot, .sw-ring { width: 9px; height: 9px; border-radius: 50%; }
+.sw-dot { background: var(--ink); }
+.sw-ring { border: 1.75px solid var(--ink); background: var(--sheet); }
+.sw-imp { font-family: var(--font-math); color: var(--ink-2); font-size: 15px; line-height: 1; }
+
+.chart { position: relative; flex: 1 1 auto; min-height: 240px; }
+.chart svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: pan-y; cursor: crosshair; border-radius: 4px; }
+.chart svg:focus-visible { outline-offset: 4px; }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--ink-2); stroke-width: 1; }
+.tick { fill: var(--ink-2); font-family: var(--font-math); font-size: 13px; }
+.ptitle { fill: var(--ink-2); font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; }
+.compact .tick { font-size: 12px; }
+.compact .ptitle { font-size: 10px; }
+.band { fill: var(--band); }
+.keepout { fill: var(--keepout); }
+.hatch-line { stroke: var(--ink-2); stroke-width: 1; opacity: 0.22; }
+.kbracket { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+.klabel { fill: var(--ink-2); font-family: var(--font-math); font-style: italic; font-size: 15px; }
+.mid { stroke: var(--ink-2); stroke-width: 1.25; stroke-dasharray: 5 4; }
+.lim { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 1 3; }
+.impulse { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; }
+.imp-label { fill: var(--ink-2); font-family: var(--font-math); font-size: 13px; paint-order: stroke; stroke: var(--sheet); stroke-width: 3px; }
+.ln-g, .ln-h, .ln-f { fill: none; stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
+.ln-g { stroke: var(--g); }
+.ln-h { stroke: var(--h); }
+.ln-f { stroke: var(--ink); stroke-width: 2; }
+.peak { fill: var(--ink); stroke: var(--sheet); stroke-width: 2; }
+.zero { fill: var(--sheet); stroke: var(--ink); stroke-width: 1.75; }
+.dlabel, .plabel { paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; stroke-linejoin: round; font-family: var(--font-math); }
+.dlabel { fill: var(--ink); font-style: italic; font-size: 16px; }
+.plabel { fill: var(--ink-2); font-size: 13px; }
+.cross { stroke: var(--ink-2); stroke-width: 1.25; }
+.dot-g, .dot-h, .dot-f { stroke: var(--sheet); stroke-width: 2; }
+.dot-g { fill: var(--g); }
+.dot-h { fill: var(--h); }
+.dot-f { fill: var(--ink); }
+
+/* Dial card */
+.dial-card { padding: 14px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 12px; }
+.dial-wrap { position: relative; flex: 0 1 auto; width: 100%; aspect-ratio: 1; min-height: 140px; }
+#dial { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.dial-ref { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 4 4; }
+.dial-tick { stroke: var(--ink-2); stroke-width: 1.25; }
+.dial-tlabel { fill: var(--ink-2); font-family: var(--font-math); font-size: 16px; }
+.dial-ring { fill: none; stroke: var(--ink-2); stroke-width: 2.5; stroke-dasharray: 0.1 8; stroke-linecap: round; }
+.dial-line { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; }
+.dial-lim { stroke: var(--rust); stroke-width: 2.5; stroke-linecap: round; }
+.dial-tip, .dial-hub { fill: var(--ink); }
+.dial-arc { fill: none; stroke: var(--ink-2); stroke-width: 1.25; }
+.dial-flabel { paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; fill: var(--ink); font-family: var(--font-math); font-style: italic; font-size: 18px; }
+.readout { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; margin: 0; width: 100%; max-width: 300px; font-size: 13px; }
+.readout dt { font-family: var(--font-math); font-style: italic; font-size: 15px; }
+.readout dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.readout .sec { color: var(--ink-2); }
+.key::before { content: ""; display: inline-block; width: 10px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 2.5px solid var(--sw); }
+
+@media (max-width: 899px) {
+  .page { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto; gap: 10px; padding-block: 10px; }
+  .plot { padding: 10px 12px; }
+  .legend { font-size: 12px; gap: 2px 12px; }
+  .dial-card { flex-direction: row; padding: 10px 12px; gap: 14px; }
+  .dial-wrap { flex: 0 0 auto; width: min(44%, 200px); min-height: 0; aspect-ratio: 1; }
+  .readout { flex: 1 1 auto; max-width: none; }
+}
+@media (max-width: 599px) {
+  .page { padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); }
+  .toolbar { gap: 8px; }
+  .keys { flex: 1 1 100%; gap: 8px; }
+  .sliders { flex-basis: 100%; }
+  .sliders-grid { gap: 8px 12px; }
+  .play { flex: none; padding: 8px 12px; }
+  #play-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .tri { flex: 1 1 auto; min-width: 0; }
+  .tri label { padding-inline: 3px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .mini { grid-template-columns: auto minmax(0, 1fr) 3em; gap: 6px; }
+  .legend { font-size: 11px; gap: 2px 10px; }
+  .chart { min-height: 200px; }
+  .dial-wrap { width: 42%; max-width: 200px; }
+  .dial-tlabel { font-size: 24px; }
+  .dial-flabel { font-size: 26px; }
+  .readout { grid-template-columns: auto 1fr; gap: 0 10px; font-size: 12px; line-height: 1.2; }
+  .readout dt { font-size: 13px; }
+  .readout .sec { display: none; }
+}
+@media (max-width: 599px) and (max-height: 620px) {
+  .legend { display: none; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+  <h1 class="sr-only">Ornithopter differential motion</h1>
+  <figure class="plot card">
+    <div class="toolbar">
+      <div class="keys">
+        <button id="play" type="button" class="play">
+          <svg id="icon-play" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9.5-5.5z"/></svg>
+          <svg id="icon-pause" viewBox="0 0 14 14" aria-hidden="true" hidden><path d="M3 1.5h3v11H3zM8 1.5h3v11H8z"/></svg>
+          <span id="play-label">Play</span>
+        </button>
+        <div class="tri" id="tri" role="radiogroup" aria-label="Smoothness of f">
+          <span class="tri-knob" aria-hidden="true"></span>
+          <input type="radio" name="mode" id="mode-lin" value="lin" checked><label for="mode-lin">Linear</label>
+          <input type="radio" name="mode" id="mode-vel" value="vel"><label for="mode-vel">Smooth vel.</label>
+          <input type="radio" name="mode" id="mode-acc" value="acc"><label for="mode-acc">Smooth accel.</label>
+        </div>
+      </div>
+      <div class="sliders">
+        <div class="sliders-grid">
+          <label class="mini" for="k"><span class="m"><i>k</i></span><input type="range" id="k" min="0.02" max="1.55" step="0.01" value="0.35"><output id="k-out" for="k">0.35</output></label>
+          <label class="mini" for="c"><span class="m"><i>c</i></span><input type="range" id="c" min="-30" max="30" step="0.25" value="4"><output id="c-out" for="c">4π</output></label>
+          <label class="mini" for="o"><span class="m"><i>o</i></span><input type="range" id="o" min="0" max="6" step="0.25" value="1"><output id="o-out" for="o">π</output></label>
+          <label class="mini" for="l"><span class="m"><i>l</i></span><input type="range" id="l" min="0" max="60" step="1" value="0"><output id="l-out" for="l">0.00</output></label>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="lg"><span class="sw sw-g"></span><span class="m"><i>g</i>′</span></span>
+      <span class="lg"><span class="sw sw-h"></span><span class="m"><i>h</i>′</span></span>
+      <span class="lg"><span class="sw sw-mid"></span>base speed <span class="m"><i>c</i></span></span>
+      <span class="lg"><span class="sw sw-keep"></span>keep-out <span class="m">|<i>y</i>| ≤ <i>o</i></span></span>
+      <span class="lg"><span class="sw"></span><span class="m"><i>f</i>, <i>f</i>″, <i>f</i>‴</span></span>
+      <span class="lg"><span class="sw-dot"></span>peak at <span class="m"><i>t</i> = <i>k</i> + <i>n</i>π/2</span></span>
+      <span class="lg"><span class="sw-ring"></span>zero at <span class="m"><i>t</i> = <i>n</i>π/2</span></span>
+      <span class="lg" id="lg-imp"><span class="sw-imp">∞</span>infinite spike</span>
+    </div>
+    <div class="chart" id="chart">
+      <svg id="svg" role="img" tabindex="0" aria-label="Velocity, acceleration, jerk and f from 0 to 2π"></svg>
+    </div>
+  </figure>
+
+  <section class="dial-card card" aria-label="Dial">
+    <div class="dial-wrap">
+      <svg id="dial" viewBox="-10 -10 320 320" role="img" aria-label="Dial with a line at 0 radians from vertical"></svg>
+    </div>
+    <dl class="readout">
+      <dt>t</dt><dd id="r-t"></dd><dd class="sec" id="r-t2"></dd>
+      <dt>f</dt><dd id="r-f"></dd><dd class="sec" id="r-f2"></dd>
+      <dt>f′</dt><dd id="r-fd"></dd><dd class="sec" id="r-fd2"></dd>
+      <dt>f″</dt><dd id="r-fa"></dd><dd class="sec"></dd>
+      <dt>f‴</dt><dd id="r-fj"></dd><dd class="sec"></dd>
+      <dt><span class="key" style="--sw: var(--g)">g</span></dt><dd id="r-g"></dd><dd class="sec" id="r-g2"></dd>
+      <dt><span class="key" style="--sw: var(--h)">h</span></dt><dd id="r-h"></dd><dd class="sec" id="r-h2"></dd>
+      <dt><span class="key" style="--sw: var(--g)">g′</span></dt><dd id="r-gd"></dd><dd class="sec" id="r-gd2"></dd>
+      <dt><span class="key" style="--sw: var(--h)">h′</span></dt><dd id="r-hd"></dd><dd class="sec" id="r-hd2"></dd>
+    </dl>
+  </section>
+</main>
+
+<script>
+(() => {
+  const PI = Math.PI, H = PI / 2, CYCLES = 4, XMAX = CYCLES * H;
+  const SPEED = XMAX / 8; // one pass from 0 to 2π takes 8 s
+  const SAMPLES = 1200;
+  const NICE = [1, 2, 5, 10, 20, 50, 100, 200];
+  const MODES = ["lin", "vel", "acc"];
+  const $ = (id) => document.getElementById(id);
+  const kInput = $("k"), cInput = $("c"), oInput = $("o"), lInput = $("l"), playBtn = $("play");
+  const svg = $("svg"), chart = $("chart"), dial = $("dial");
+  const state = { k: 0, c: 0, o: 0, amp: H, mode: "lin", acc: null, x: 0, hoverX: null, playing: false };
+  let geom = null;
+
+  // Quintic smoothstep, its first two derivatives, and its integral from 0.
+  const ss = (u) => u * u * u * (10 + u * (6 * u - 15));
+  const ss1 = (u) => 30 * u * u * (u - 1) * (u - 1);
+  const ss2 = (u) => 60 * u * (u - 1) * (2 * u - 1);
+  const ssInt = (u) => u * u * u * u * (2.5 + u * (u - 3));
+
+  // Smooth-acceleration phase rate: φ' = low + delta·T(τ), with T = 1 across [0, k] and 0 across [k, π/2],
+  // switched by smoothsteps of width 2d centred on τ = 0 and τ = k. low and delta are solved so that
+  // ∫₀ᵏ φ' = π/2 and ∫₀^{π/2} φ' = π, which keeps every zero at nπ/2 and every peak at k + nπ/2.
+  function accParams(k) {
+    const d = Math.min(k, H - k) / 2, e = (5 * d) / 16, den = k * (H - k) - H * e;
+    return { d, low: (H * (k - 2 * e)) / den, delta: (H * (H - 2 * k)) / den };
+  }
+  // [T, T', T'', ∫₀^τ T] for τ in [0, π/2).
+  function rate(tau, k, d) {
+    const L = 2 * d;
+    if (tau < d) {
+      const u = (tau + d) / L;
+      return [ss(u), ss1(u) / L, ss2(u) / (L * L), L * (ssInt(u) - ssInt(0.5))];
+    }
+    const i1 = (27 * d) / 32;
+    if (tau < k - d) return [1, 0, 0, i1 + tau - d];
+    const i2 = i1 + k - 2 * d;
+    if (tau < k + d) {
+      const u = (tau - k + d) / L;
+      return [1 - ss(u), -ss1(u) / L, -ss2(u) / (L * L), i2 + L * (u - ssInt(u))];
+    }
+    const i3 = i2 + d;
+    if (tau < H - d) return [0, 0, 0, i3];
+    const u = (tau - H + d) / L;
+    return [ss(u), ss1(u) / L, ss2(u) / (L * L), i3 + L * ssInt(u)];
+  }
+
+  // Unscaled f (amplitude π/2) and its first three derivatives at t. Odd half-cycles are negated: f(t + π/2) = −f(t).
+  function shape(t) {
+    const k = state.k, n = Math.floor(t / H), tau = t - n * H;
+    if (state.mode === "lin") {
+      const rise = tau <= k;
+      const y = rise ? (PI * tau) / (2 * k) : (PI * (PI - 2 * tau)) / (2 * (PI - 2 * k));
+      const v = rise ? PI / (2 * k) : -PI / (PI - 2 * k);
+      return (n & 1) === 1 ? { f: -y, v: -v, a: 0, j: 0 } : { f: y, v, a: 0, j: 0 };
+    }
+    // f = (π/2)·sin φ; φ is nπ at the zeros and π/2 + nπ at the peaks.
+    let ph, p1, p2, p3;
+    if (state.mode === "vel") {
+      // φ = 2t + (π/2 − 2k)·w², w the 0→1→0 tent peaking at τ = k; φ' = 2 wherever w = 0.
+      const D = H - 2 * k;
+      const [w, dw] = tau <= k ? [tau / k, 1 / k] : [(H - tau) / (H - k), -1 / (H - k)];
+      ph = 2 * t + D * w * w;
+      p1 = 2 + 2 * D * w * dw;
+      p2 = 2 * D * dw * dw;
+      p3 = 0;
+    } else {
+      const { d, low, delta } = state.acc;
+      const [T, T1, T2, I] = rate(tau, k, d);
+      ph = n * PI + low * tau + delta * I;
+      p1 = low + delta * T;
+      p2 = delta * T1;
+      p3 = delta * T2;
+    }
+    const sn = Math.sin(ph), cs = Math.cos(ph);
+    return {
+      f: H * sn,
+      v: H * cs * p1,
+      a: H * (-sn * p1 * p1 + cs * p2),
+      j: H * (-cs * p1 * p1 * p1 - 3 * sn * p1 * p2 + cs * p3),
+    };
+  }
+
+  // f scaled to amplitude π/2 − l; zero and peak times are unchanged.
+  function kin(t) {
+    const q = shape(t), s = state.amp / H;
+    return { f: s * q.f, v: s * q.v, a: s * q.a, j: s * q.j };
+  }
+
+  function sampleTs() {
+    const ts = [];
+    for (let i = 0; i <= SAMPLES; i++) ts.push((i / SAMPLES) * XMAX);
+    for (let n = 0; n < CYCLES; n++) ts.push(n * H + state.k);
+    return ts.sort((a, b) => a - b);
+  }
+
+  function fmt(v) {
+    const a = Math.abs(v);
+    const s = a < 5e-4 ? "0.000" : a >= 1e4 ? (v / 1000).toFixed(1) + "k" : v.toFixed(3);
+    return s.replace("-", "−");
+  }
+  // q times π as text: 0, π, −π, 3π, 2.25π, ...
+  const piText = (q) => (q === 0 ? "0" : (q < 0 ? "−" : "") + (Math.abs(q) === 1 ? "" : String(Math.abs(q))) + "π");
+  // Label for halves * π/2 with halves >= 0: 0, π/2, π, 3π/2, 2π, ...
+  function piLabel(halves) {
+    if (halves === 0) return "0";
+    if (halves % 2 === 0) return halves === 2 ? "π" : halves / 2 + "π";
+    return halves === 1 ? "π/2" : halves + "π/2";
+  }
+  function fmtTick(v) {
+    const a = Math.abs(v);
+    const s = a >= 10000 ? +(a / 1000).toPrecision(4) + "k" : String(+a.toPrecision(6));
+    return (v < 0 ? "−" : "") + s;
+  }
+  // Ticks at multiples of step·π covering [lo, hi], about `target` intervals.
+  function axisFor(lo, hi, target) {
+    const raw = (hi - lo) / PI / target;
+    const step = NICE.find((s) => s >= raw - 1e-9) ?? Math.ceil(raw);
+    const n0 = Math.floor(lo / (step * PI) + 1e-9) * step;
+    const n1 = Math.max(n0 + step, Math.ceil(hi / (step * PI) - 1e-9) * step);
+    const pad = (n1 - n0) * PI * 0.04;
+    return { step, n0, n1, d0: n0 * PI - pad, d1: n1 * PI + pad };
+  }
+  // Symmetric numeric axis around 0 with 1-2-5 steps, at most `perSide` intervals per side.
+  function numAxis(maxAbs, perSide) {
+    const A = Math.max(maxAbs, 1), raw = A / perSide;
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 5, 10].map((s) => s * p).find((s) => s >= raw - 1e-12);
+    const n = Math.ceil(A / step - 1e-9);
+    return { step, n, d: n * step * 1.1 };
+  }
+  const scaleY = (top, ph, a) => (y) => top + ph - ((y - a.d0) / (a.d1 - a.d0)) * ph;
+  const symY = (top, ph, half) => (y) => top + ph / 2 - (y / half) * (ph / 2);
+
+  // Dial geometry in its viewBox units; angles are measured clockwise from the top.
+  const C = 150, R = 100;
+  function buildDial() {
+    let s = `<line class="dial-ref" x1="${C}" y1="${C - R}" x2="${C}" y2="${C + R}"/>`;
+    for (const [a, label] of [[-H, "−π/2"], [-H / 2, "−π/4"], [0, "0"], [H / 2, "π/4"], [H, "π/2"]]) {
+      const sn = Math.sin(a), cs = Math.cos(a);
+      s += `<line class="dial-tick" x1="${C + (R + 6) * sn}" y1="${C - (R + 6) * cs}" x2="${C + (R + 12) * sn}" y2="${C - (R + 12) * cs}"/>`;
+      s += `<text class="dial-tlabel" x="${C + (R + 28) * sn}" y="${C - (R + 28) * cs}" text-anchor="middle" dominant-baseline="middle">${label}</text>`;
+    }
+    s += `<circle class="dial-ring" cx="${C}" cy="${C}" r="${R}"/>`;
+    s += '<g id="d-lim"></g>';
+    s += '<path class="dial-arc" id="d-arc" d="M0,0" visibility="hidden"/>';
+    s += '<text class="dial-flabel" id="d-flabel" text-anchor="middle" dominant-baseline="middle" visibility="hidden">f</text>';
+    const L = R * 1.1;
+    s += `<g id="d-needle"><line class="dial-line" x1="${C}" y1="${C - L}" x2="${C}" y2="${C + L}"/><circle class="dial-tip" cx="${C}" cy="${C - L}" r="5"/></g>`;
+    s += `<circle class="dial-hub" cx="${C}" cy="${C}" r="4.5"/>`;
+    dial.innerHTML = s;
+  }
+
+  function draw() {
+    const W = Math.max(280, Math.round(chart.clientWidth));
+    const Hpx = Math.max(240, Math.round(chart.clientHeight));
+    const compact = W < 520;
+    const m = compact ? { l: 52, r: 8, t: 24, b: 22 } : { l: 62, r: 12, t: 26, b: 26 }, gap = compact ? 10 : 16;
+    const avail = Hpx - m.t - m.b - 3 * gap;
+    const ph1 = Math.round(avail * 0.31), phs = Math.floor((avail - ph1) / 3);
+    // Too short for three stacked labels: keep the outer two and let the zero axis speak for itself.
+    const sparse = phs < 44;
+    const panels = [];
+    let y = m.t;
+    for (const ph of [ph1, phs, phs, phs]) { panels.push([y, ph]); y += ph + gap; }
+    const pw = W - m.l - m.r;
+    const sx = (x) => m.l + (x / XMAX) * pw;
+    const [[top1], [top2], [top3], [top4]] = panels;
+
+    const c = state.c, o = state.o, k = state.k;
+    const ts = sampleTs();
+    const K = ts.map(kin);
+    const GD = K.map((p) => c + p.v), HD = K.map((p) => c - p.v);
+    const FA = K.map((p) => p.a), FJ = K.map((p) => p.j), F = K.map((p) => p.f);
+    const av = axisFor(Math.min(...GD, ...HD, -o, 0), Math.max(...GD, ...HD, o, 0), Math.max(2, Math.min(6, Math.round(ph1 / 34))));
+    const perSide = phs >= 110 ? 2 : 1;
+    const aa = numAxis(Math.max(...FA.map(Math.abs)), perSide);
+    const aj = numAxis(Math.max(...FJ.map(Math.abs)), perSide);
+    const sy1 = scaleY(top1, ph1, av), sy2 = symY(top2, phs, aa.d), sy3 = symY(top3, phs, aj.d), sy4 = symY(top4, phs, H * 1.12);
+    geom = { W, m, pw, sx, sy1, sy2, sy3, sy4 };
+
+    let s = '<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-line" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>';
+    for (const [top, ph] of panels) {
+      for (let i = 0; i <= CYCLES; i++) s += `<line class="gridline" x1="${sx(i * H)}" x2="${sx(i * H)}" y1="${top}" y2="${top + ph}"/>`;
+    }
+    const hTick = (yy, label) =>
+      `<line class="gridline" x1="${m.l}" x2="${m.l + pw}" y1="${yy}" y2="${yy}"/><text class="tick" x="${m.l - 8}" y="${yy}" text-anchor="end" dominant-baseline="middle">${label}</text>`;
+    for (let n = av.n0; n <= av.n1; n += av.step) s += hTick(sy1(n * PI), piText(n));
+    for (const [ax, sy] of [[aa, sy2], [aj, sy3]]) {
+      for (let i = -ax.n; i <= ax.n; i++) if (!(sparse && i === 0)) s += hTick(sy(i * ax.step), fmtTick(i * ax.step));
+    }
+    for (const [v, label] of [[-H, "−π/2"], [0, "0"], [H, "π/2"]]) if (!(sparse && v === 0)) s += hTick(sy4(v), label);
+    if (state.amp < H) {
+      for (const v of [-state.amp, state.amp]) s += `<line class="lim" x1="${m.l}" x2="${m.l + pw}" y1="${sy4(v)}" y2="${sy4(v)}"/>`;
+      s += `<text class="plabel" x="${m.l + pw - 6}" y="${sy4(state.amp) + 14}" text-anchor="end">±(π/2 − l)</text>`;
+    }
+
+    if (o > 0) {
+      const yt = sy1(o), hb = sy1(-o) - yt;
+      s += `<rect class="keepout" x="${m.l}" y="${yt}" width="${pw}" height="${hb}"/>`;
+      s += `<rect fill="url(#hatch)" x="${m.l}" y="${yt}" width="${pw}" height="${hb}"/>`;
+    }
+    for (let n = 0; n < CYCLES; n++) {
+      const x0 = sx(n * H), w = sx(n * H + k) - x0;
+      for (const [top, ph] of panels) s += `<rect class="band" x="${x0}" y="${top}" width="${w}" height="${ph}"/>`;
+    }
+    const b0 = sx(0), b1 = sx(k);
+    s += `<path class="kbracket" d="M${b0},${top1 - 2}V${top1 - 8}H${b1}V${top1 - 2}"/>`;
+    s += `<text class="klabel" x="${(b0 + b1) / 2}" y="${top1 - 11}" text-anchor="middle">k</text>`;
+
+    const titles = ["VELOCITY", "ACCEL", "JERK", "ANGLE"];
+    const sys = [sy1, sy2, sy3, sy4];
+    panels.forEach(([top, ph], i) => {
+      s += `<line class="axis" x1="${m.l}" x2="${m.l}" y1="${top}" y2="${top + ph}"/>`;
+      s += `<line class="axis" x1="${m.l}" x2="${m.l + pw}" y1="${sys[i](0)}" y2="${sys[i](0)}"/>`;
+      s += `<text class="ptitle" transform="translate(${compact ? 9 : 12} ${top + ph / 2}) rotate(-90)" text-anchor="middle" dominant-baseline="middle">${titles[i]}</text>`;
+    });
+    for (let i = 0; i <= CYCLES; i++) s += `<text class="tick" x="${sx(i * H)}" y="${top4 + phs + (compact ? 16 : 19)}" text-anchor="middle">${piLabel(i)}</text>`;
+
+    // Infinite values sit where the panel above jumps: every zero and peak.
+    const kinks = [];
+    for (let n = 0; n <= CYCLES; n++) kinks.push(n * H, n * H + k);
+    kinks.pop();
+    const spiky = state.mode === "lin" ? [panels[1], panels[2]] : state.mode === "vel" ? [panels[2]] : [];
+    for (const [top, ph] of spiky) {
+      for (const t of kinks) {
+        s += `<line class="impulse" x1="${sx(t)}" x2="${sx(t)}" y1="${top}" y2="${top + ph}"/>`;
+        // The edge spikes repeat the interior ones and their labels would straddle the axes.
+        if (t > 0 && t < XMAX) s += `<text class="imp-label" x="${sx(t)}" y="${top + 11}" text-anchor="middle">∞</text>`;
+      }
+    }
+
+    const path = (ys, sy) => ts.map((t, i) => `${i ? "L" : "M"}${sx(t).toFixed(2)},${sy(ys[i]).toFixed(2)}`).join("");
+    s += `<line class="mid" x1="${sx(0)}" x2="${sx(XMAX)}" y1="${sy1(c)}" y2="${sy1(c)}"/>`;
+    s += `<path class="ln-h" d="${path(HD, sy1)}"/><path class="ln-g" d="${path(GD, sy1)}"/>`;
+    s += `<path class="ln-f" d="${path(FA, sy2)}"/>`;
+    s += `<path class="ln-f" d="${path(FJ, sy3)}"/>`;
+    s += `<path class="ln-f" d="${path(F, sy4)}"/>`;
+    for (let n = 0; n <= CYCLES; n++) s += `<circle class="zero" cx="${sx(n * H)}" cy="${sy4(0)}" r="3.5"/>`;
+    for (let n = 0; n < CYCLES; n++) s += `<circle class="peak" cx="${sx(n * H + k)}" cy="${sy4(kin(n * H + k).f)}" r="4"/>`;
+
+    // Velocity labels sit on the first slow stretch, where every line is shallow.
+    const tl = (k + H) / 2, at = kin(tl);
+    const lab = (text, yy, above) => `<text class="dlabel" x="${sx(tl)}" y="${yy + (above ? -10 : 20)}" text-anchor="middle">${text}</text>`;
+    s += lab("g′", sy1(c + at.v), at.v >= 0) + lab("h′", sy1(c - at.v), at.v < 0);
+    s += lab("f", sy4(at.f), true);
+
+    s += panels.map(([top, ph], i) => `<line class="cross" id="cv${i + 1}" y1="${top}" y2="${top + ph}"/>`).join("");
+    s += '<circle class="dot-h" id="chd" r="5"/><circle class="dot-g" id="cgd" r="5"/>' +
+      '<circle class="dot-f" id="ca" r="4.5"/><circle class="dot-f" id="cj" r="4.5"/><circle class="dot-f" id="cf" r="5"/>';
+
+    svg.classList.toggle("compact", compact);
+    svg.setAttribute("viewBox", `0 0 ${W} ${Hpx}`);
+    svg.setAttribute("aria-label", `From 0 to 2π with k = ${k.toFixed(2)}, base speed c = ${piText(Number(cInput.value))}, ${$("mode-" + state.mode).nextElementSibling.textContent.toLowerCase()} f of amplitude ${fmt(state.amp)}: velocities g′ and h′, then acceleration f″, jerk f‴ and the dial angle f`);
+    svg.innerHTML = s;
+  }
+
+  // While paused, hovering previews a position without moving the playhead.
+  const shownX = () => (!state.playing && state.hoverX != null ? state.hoverX : state.x);
+
+  function updateCursor() {
+    if (!geom) return;
+    const { sx, sy1, sy2, sy3, sy4 } = geom;
+    const t = shownX(), px = sx(t), q = kin(t), c = state.c;
+    const gv = c * t + q.f, hv = c * t - q.f, gdv = c + q.v, hdv = c - q.v;
+    for (const id of ["#cv1", "#cv2", "#cv3", "#cv4"]) {
+      const el = svg.querySelector(id);
+      el.setAttribute("x1", px);
+      el.setAttribute("x2", px);
+    }
+    const place = (id, yy) => {
+      const el = svg.querySelector(id);
+      el.setAttribute("cx", px);
+      el.setAttribute("cy", yy);
+    };
+    place("#cgd", sy1(gdv));
+    place("#chd", sy1(hdv));
+    place("#ca", sy2(q.a));
+    place("#cj", sy3(q.j));
+    place("#cf", sy4(q.f));
+
+    const deg = (q.f * 180) / PI;
+    $("d-needle").setAttribute("transform", `rotate(${deg} ${C} ${C})`);
+    const arc = $("d-arc"), flabel = $("d-flabel");
+    if (Math.abs(q.f) < 0.03) {
+      arc.setAttribute("visibility", "hidden");
+      flabel.setAttribute("visibility", "hidden");
+    } else {
+      const ra = R * 0.42, lr = ra + 14;
+      arc.setAttribute("d", `M${C},${C - ra}A${ra},${ra} 0 0 ${q.f > 0 ? 1 : 0} ${C + ra * Math.sin(q.f)},${C - ra * Math.cos(q.f)}`);
+      flabel.setAttribute("x", C + lr * Math.sin(q.f / 2));
+      flabel.setAttribute("y", C - lr * Math.cos(q.f / 2));
+      arc.setAttribute("visibility", "visible");
+      flabel.setAttribute("visibility", "visible");
+    }
+    dial.setAttribute("aria-label", `Dial with a line at ${fmt(q.f)} radians from vertical`);
+
+    const show = (id, v) => {
+      $(id).textContent = fmt(v);
+      $(id + "2").textContent = fmt(v / PI) + "π";
+    };
+    show("r-t", t);
+    $("r-f").textContent = fmt(q.f) + " rad";
+    $("r-f2").textContent = (Math.abs(deg) < 0.05 ? 0 : deg).toFixed(1).replace("-", "−") + "°";
+    show("r-fd", q.v);
+    $("r-fa").textContent = fmt(q.a);
+    $("r-fj").textContent = fmt(q.j);
+    show("r-g", gv);
+    show("r-h", hv);
+    show("r-gd", gdv);
+    show("r-hd", hdv);
+  }
+
+  // Marks at ±(π/2 − l); omitted at l = 0, where they would sit on the ±π/2 ticks.
+  function renderDialLimits() {
+    const A = state.amp;
+    $("d-lim").innerHTML = A < H
+      ? [-A, A].map((a) => {
+          const sn = Math.sin(a), cs = Math.cos(a);
+          return `<line class="dial-lim" x1="${C + (R - 12) * sn}" y1="${C - (R - 12) * cs}" x2="${C + (R + 4) * sn}" y2="${C - (R + 4) * cs}"/>`;
+        }).join("")
+      : "";
+  }
+
+  function renderButton() {
+    $("play-label").textContent = state.playing ? "Pause" : state.x >= XMAX ? "Replay" : "Play";
+    // SVG elements have no .hidden property, so toggle the attribute itself.
+    $("icon-play").toggleAttribute("hidden", state.playing);
+    $("icon-pause").toggleAttribute("hidden", !state.playing);
+    playBtn.classList.toggle("on", state.playing);
+  }
+
+  let raf = 0, last = 0;
+  function tick(now) {
+    // Cap the step so a backgrounded tab does not jump the playhead on return.
+    const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
+    last = now;
+    state.x = Math.min(XMAX, state.x + dt * SPEED);
+    updateCursor();
+    if (state.x >= XMAX) { pause(); return; }
+    raf = requestAnimationFrame(tick);
+  }
+  function play() {
+    if (state.x >= XMAX) state.x = 0;
+    state.playing = true;
+    state.hoverX = null;
+    last = 0;
+    raf = requestAnimationFrame(tick);
+    renderButton();
+  }
+  function pause() {
+    state.playing = false;
+    cancelAnimationFrame(raf);
+    renderButton();
+  }
+  function setPlayhead(x) {
+    if (state.playing) pause();
+    state.x = x;
+    state.hoverX = null;
+    updateCursor();
+    renderButton();
+  }
+
+  function update() {
+    state.k = Number(kInput.value);
+    state.c = Number(cInput.value) * PI;
+    state.o = Number(oInput.value) * PI;
+    state.mode = document.querySelector('input[name="mode"]:checked').value;
+    state.acc = accParams(state.k);
+    const l = (Number(lInput.value) * PI) / 360; // slider steps are π/360
+    state.amp = H - l;
+    $("k-out").textContent = state.k.toFixed(2);
+    $("c-out").textContent = piText(Number(cInput.value));
+    $("o-out").textContent = piText(Number(oInput.value));
+    $("l-out").textContent = l.toFixed(2);
+    lInput.setAttribute("aria-valuetext", l.toFixed(3) + " radians");
+    $("tri").style.setProperty("--i", MODES.indexOf(state.mode));
+    $("lg-imp").hidden = state.mode === "acc";
+    renderDialLimits();
+    draw();
+    updateCursor();
+  }
+
+  function xFromEvent(e) {
+    const rect = svg.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (geom.W / rect.width);
+    return Math.min(XMAX, Math.max(0, ((px - geom.m.l) / geom.pw) * XMAX));
+  }
+
+  playBtn.addEventListener("click", () => (state.playing ? pause() : play()));
+  for (const el of [kInput, cInput, oInput, lInput]) el.addEventListener("input", update);
+  document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener("change", update));
+  svg.addEventListener("pointerdown", (e) => setPlayhead(xFromEvent(e)));
+  svg.addEventListener("pointermove", (e) => {
+    if (e.buttons & 1) setPlayhead(xFromEvent(e));
+    else if (!state.playing) { state.hoverX = xFromEvent(e); updateCursor(); }
+  });
+  svg.addEventListener("pointerleave", () => { state.hoverX = null; updateCursor(); });
+  svg.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const step = (XMAX / 120) * (e.shiftKey ? 5 : 1);
+    setPlayhead(Math.min(XMAX, Math.max(0, state.x + (e.key === "ArrowRight" ? step : -step))));
+  });
+
+  buildDial();
+  new ResizeObserver(() => { draw(); updateCursor(); }).observe(chart);
+  update();
+  renderButton();
+})();
+</script>
+</body>
+</html>
