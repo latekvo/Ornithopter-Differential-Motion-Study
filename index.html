@@ -20,7 +20,7 @@
   --ink-2: color-mix(in srgb, var(--forest) 78%, var(--cream));
   --rule: color-mix(in srgb, var(--tan) 48%, var(--cream));
   --grid: color-mix(in srgb, var(--tan) 22%, var(--cream));
-  /* Shifted apart in lightness so g and h stay distinct under red-green colour blindness. */
+  /* Lightness pushed apart so g and h stay distinct with red-green colour blindness. */
   --g: color-mix(in srgb, var(--olive) 85%, var(--forest));
   --h: color-mix(in srgb, var(--rust) 80%, var(--tan));
   --band: color-mix(in srgb, var(--tan) 20%, transparent);
@@ -447,7 +447,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); fo
     const m = compact ? { l: 52, r: 8, t: 24, b: 22 } : { l: 62, r: 12, t: 26, b: 26 }, gap = compact ? 10 : 16;
     const avail = Hpx - m.t - m.b - 3 * gap;
     const ph1 = Math.round(avail * 0.31), phs = Math.floor((avail - ph1) / 3);
-    // Too short for three stacked labels: keep the outer two and let the zero axis speak for itself.
+    // Too short for three tick labels; the zero label is dropped.
     const sparse = phs < 44;
     const panels = [];
     let y = m.t;
@@ -514,7 +514,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); fo
     for (const [top, ph] of spiky) {
       for (const t of kinks) {
         s += `<line class="impulse" x1="${sx(t)}" x2="${sx(t)}" y1="${top}" y2="${top + ph}"/>`;
-        // The edge spikes repeat the interior ones and their labels would straddle the axes.
+        // Edge labels would straddle the axes.
         if (t > 0 && t < XMAX) s += `<text class="imp-label" x="${sx(t)}" y="${top + 11}" text-anchor="middle">∞</text>`;
       }
     }
